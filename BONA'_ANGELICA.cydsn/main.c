@@ -32,8 +32,8 @@
 #define CTRL_REG4_HR 0x08 //High Resolution Mode
 #define CTRL_REG1_ODR 0x57 //f sampling 100Hz
 
-#define M_digit_TO_ms2 2000*9.8/2047
-#define Q_digit_TO_ms2 M_digit_TO_ms2*4095
+#define M_digit_TO_ms2 4*9.8/4095
+#define Q_digit_TO_ms2 0
 
 ErrorCode error;
 char message[50];
@@ -44,6 +44,10 @@ uint8_t ACC_Z[2];
 int16 Acc_X;
 int16 Acc_Y;
 int16 Acc_Z;
+
+int16 Acc_X_new;
+int16 Acc_Y_new;
+int16 Acc_Z_new;
 
 float Acc_X_conv;
 float Acc_Y_conv;
@@ -118,12 +122,12 @@ int main(void)
                     if (error == NO_ERROR)
                     {
                         error = I2C_Peripheral_ReadRegister(LIS3DH_DEVICE_ADDRESS,
-                                            OUT_Z_H,
+                                            OUT_Z_L,
                                             &ACC_Z[0]);
                         if (error == NO_ERROR)
                         {
                             error = I2C_Peripheral_ReadRegister(LIS3DH_DEVICE_ADDRESS,
-                                            OUT_Z_L,
+                                            OUT_Z_H,
                                             &ACC_Z[1]);
                         }
                     }
@@ -134,7 +138,7 @@ int main(void)
         {
             Acc_X = (int16)((ACC_X[0]) | (ACC_X[1]<<8))>>4;
             Acc_Y = (int16)((ACC_Y[0]) | (ACC_Y[1]<<8))>>4;
-            Acc_X = (int16)((ACC_Z[0]) | (ACC_Z[1]<<8))>>4;
+            Acc_Z = (int16)((ACC_Z[0]) | (ACC_Z[1]<<8))>>4;
             
             //ACC X
             if((Acc_X >= 0) && (Acc_X <= 2047))
@@ -146,11 +150,10 @@ int main(void)
                 Acc_X_conv =(M_digit_TO_ms2 * Acc_X - Q_digit_TO_ms2) * 1000;
             }
             
-            Acc_X = (int16)(Acc_X_conv);
-            //ACC_TOT[1] = 0;
-           // ACC_TOT[2] = 0;
-            ACC_TOT[1] = (uint8_t)(Acc_X & 0xFF);
-            ACC_TOT[2] = (uint8_t)(Acc_X >> 8);
+            Acc_X_new = (int16)(Acc_X_conv);
+            
+            ACC_TOT[1] = (uint8_t)(Acc_X_new & 0xFF);
+            ACC_TOT[2] = (uint8_t)(Acc_X_new >> 8);
             
             //ACC Y
             if((Acc_Y >= 0) && (Acc_Y <= 2047))
@@ -162,11 +165,10 @@ int main(void)
                 Acc_Y_conv =(M_digit_TO_ms2 * Acc_Y - Q_digit_TO_ms2) * 1000;
             }
             
-            Acc_Y = (int16)(Acc_Y_conv);
-            //ACC_TOT[5] = 0;
-            //ACC_TOT[6] = 0;
-            ACC_TOT[3] = (uint8_t)(Acc_Y & 0xFF);
-            ACC_TOT[4] =(uint8_t)(Acc_Y >> 8);
+            Acc_Y_new = (int16)(Acc_Y_conv);
+            
+            ACC_TOT[3] = (uint8_t)(Acc_Y_new & 0xFF);
+            ACC_TOT[4] =(uint8_t)(Acc_Y_new >> 8);
             
             //ACC Z
             if((Acc_Z >= 0) && (Acc_Z <= 2047))
@@ -178,11 +180,10 @@ int main(void)
                 Acc_Z_conv =(M_digit_TO_ms2 * Acc_Z - Q_digit_TO_ms2) * 1000;
             }
             
-            Acc_Z = (int16)(Acc_Z_conv);
-           // ACC_TOT[9] = 0;
-           // ACC_TOT[10] = 0;
-            ACC_TOT[5] = (uint8_t)(Acc_Z & 0xFF);
-            ACC_TOT[6] = (uint8_t)(Acc_Z >> 8);
+            Acc_Z_new = (int16)(Acc_Z_conv);
+           
+            ACC_TOT[5] = (uint8_t)(Acc_Z_new & 0xFF);
+            ACC_TOT[6] = (uint8_t)(Acc_Z_new >> 8);
             
             UART_PutArray(ACC_TOT,8);
         }
