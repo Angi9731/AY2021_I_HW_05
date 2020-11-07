@@ -13,12 +13,11 @@
 #include "I2C_Interface.h"
 #include "stdio.h"
 #include "ErrorCode.h"
+#include "InterruptRoutines.h"
 
 
 
-#define LIS3DH_DEVICE_ADDRESS 0x18
 
-#define CTRL_REG1 0x20
 #define CTRL_REG4 0x23
 #define CTRL_REG0 0x1E
 #define STATUS_REG 0x27
@@ -34,6 +33,8 @@
 
 #define M_digit_TO_ms2 4*9.8/4095
 #define Q_digit_TO_ms2 0
+
+
 
 ErrorCode error;
 char message[50];
@@ -54,7 +55,9 @@ float Acc_Y_conv;
 float Acc_Z_conv;
 
 uint8_t ACC_TOT[8];
-
+uint8_t frequency;
+//uint8_t freq;
+uint8 check;
 
 
 int main(void)
@@ -62,17 +65,34 @@ int main(void)
     CyGlobalIntEnable; 
     UART_Start();
     I2C_Peripheral_Start();
-    
     CyDelay(5);
-   /* EEPROM_Start();
-    EEPROM_UpdateTemperature();
-    EEPROM_WriteByte(1,0x0000);*/
+    EEPROM_Start();
+    flag_button = 0;
+    frequency = EEPROM_ReadByte(0x0000);
+    
+    switch(frequency)
+    {
+        case CTRL_REG1_FREQ1:
+        case CTRL_REG1_FREQ10:
+        case CTRL_REG1_FREQ25:
+        case CTRL_REG1_FREQ50:
+        case CTRL_REG1_FREQ100:
+        case CTRL_REG1_FREQ200:
+            break;
+        default:
+           EEPROM_UpdateTemperature();
+           EEPROM_WriteByte(CTRL_REG1_FREQ1,0x0000);
+           break;
+    }
+    
+    frequency = EEPROM_ReadByte(0x0000);
+    
     
     error = I2C_Peripheral_WriteRegister(LIS3DH_DEVICE_ADDRESS,
                                              CTRL_REG4,
                                              CTRL_REG4_HR);
     
-        if (error == NO_ERROR)
+        /*if (error == NO_ERROR)
         {
             sprintf(message, "CONTROL REGISTER 4 successfully written as: 0x%02X\r\n", CTRL_REG4_HR);
             UART_PutString(message); 
@@ -80,13 +100,13 @@ int main(void)
         else
         {
             UART_PutString("Error occurred during I2C comm to set control register 4\r\n");   
-        }
+        }*/
         
      error = I2C_Peripheral_WriteRegister(LIS3DH_DEVICE_ADDRESS,
                                              CTRL_REG1,
-                                             CTRL_REG1_ODR);
+                                             frequency);
     
-        if (error == NO_ERROR)
+        /*if (error == NO_ERROR)
         {
             sprintf(message, "CONTROL REGISTER 1 successfully written as: 0x%02X\r\n", CTRL_REG1_ODR);
             UART_PutString(message); 
@@ -94,13 +114,22 @@ int main(void)
         else
         {
             UART_PutString("Error occurred during I2C comm to set control register 1\r\n");   
-        }
+        }*/
 
+    ISR_BUTTON_StartEx(BUTTON_ISR);
+    Clock_DEB_Start();
+    
     ACC_TOT[0] = 0xA0;
     ACC_TOT[7] = 0xC0;
     
     for(;;)
     {
+      I2C_Peripheral_ReadRegister(LIS3DH_DEVICE_ADDRESS,
+                                            STATUS_REG,
+                                            &check);
+      if(check & 0b00001000)
+      {
+            
         error = I2C_Peripheral_ReadRegister(LIS3DH_DEVICE_ADDRESS,
                                             OUT_X_L,
                                             &ACC_X[0]);
@@ -187,6 +216,10 @@ int main(void)
             
             UART_PutArray(ACC_TOT,8);
         }
+    }
+    
+    
+    
             
             
             
