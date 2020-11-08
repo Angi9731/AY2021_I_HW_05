@@ -19,7 +19,6 @@
     
     ErrorCode I2C_Peripheral_Start(void);
     
-    
     ErrorCode I2C_Peripheral_Stop(void);
     
     ErrorCode I2C_Peripheral_ReadRegister(uint8_t device_address, 
