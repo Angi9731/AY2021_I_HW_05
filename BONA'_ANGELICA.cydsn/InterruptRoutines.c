@@ -14,8 +14,8 @@
 
 CY_ISR(BUTTON_ISR)
 {
-    flag_button = 1;
-    count ++;
+    flag_button = 1; //button pressed
+    count ++; //new frequency selected
      
 }
 /* [] END OF FILE */

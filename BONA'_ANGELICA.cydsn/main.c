@@ -9,61 +9,10 @@
  *
  * ========================================
 */
-#include "project.h"
 #include "I2C_Interface.h"
 #include "stdio.h"
-#include "ErrorCode.h"
 #include "InterruptRoutines.h"
-
-#define LIS3DH_DEVICE_ADDRESS 0x18
-
-#define CTRL_REG1_FREQ1 0x17
-#define CTRL_REG1_FREQ10 0x27
-#define CTRL_REG1_FREQ25 0x37
-#define CTRL_REG1_FREQ50 0x47
-#define CTRL_REG1_FREQ100 0x57
-#define CTRL_REG1_FREQ200 0x67
-
-#define CTRL_REG1 0x20
-#define CTRL_REG4 0x23
-#define CTRL_REG0 0x1E
-#define STATUS_REG 0x27
-
-#define OUT_X_L 0x28
-#define OUT_X_H 0x29
-#define OUT_Y_L 0x2A
-#define OUT_Y_H 0x2B
-#define OUT_Z_L 0x2C
-#define OUT_Z_H 0x2D
-
-#define CTRL_REG4_HR 0x08 //High Resolution Mode
-
-#define M_digit_TO_ms2 4*9.8/4095
-#define Q_digit_TO_ms2 0
-
-
-
-ErrorCode error;
-uint8_t ACC_X[2];
-uint8_t ACC_Y[2];
-uint8_t ACC_Z[2];
-
-int16 Acc_X;
-int16 Acc_Y;
-int16 Acc_Z;
-
-int16 Acc_X_new;
-int16 Acc_Y_new;
-int16 Acc_Z_new;
-
-float Acc_X_conv;
-float Acc_Y_conv;
-float Acc_Z_conv;
-
-uint8 ACC_TOT[8];
-uint8 frequency;
-uint8 check;
-
+#include "Variables.h"
 
 int main(void)
 {
@@ -72,14 +21,15 @@ int main(void)
     I2C_Peripheral_Start();
     CyDelay(5);
     EEPROM_Start();
-    flag_button = 0;
-    count = 0;
     
-    ///////////////////////////////
+    flag_button = 0; //initialised as 'button not pressed'
+    count = 0; //initialised to the value corresponding to f = 1Hz
     
-    frequency = EEPROM_ReadByte(0x0000);
+    //Initial setting of EEPROM and SETTING REGISTERS
     
-    switch(frequency)
+    frequency = EEPROM_ReadByte(EEPROM); //read the value already present in EEPROM
+    
+    switch(frequency) //if the value corresponds to one of the allowed frequencies keep it and set the corresponding count
     {
         case CTRL_REG1_FREQ1:
             count = 0;
@@ -99,45 +49,46 @@ int main(void)
         case CTRL_REG1_FREQ200:
             count = 5;
         break;
-        default:
+        default: //otherwise write the first frequency f = 1Hz
            EEPROM_UpdateTemperature();
-           EEPROM_WriteByte(CTRL_REG1_FREQ1,0x0000);
+           EEPROM_WriteByte(CTRL_REG1_FREQ1,EEPROM);
            break;
     }
     
-    frequency = EEPROM_ReadByte(0x0000);
+    frequency = EEPROM_ReadByte(EEPROM); //read again the frequency in the EEPROM
     
     
-    I2C_Peripheral_WriteRegister(LIS3DH_DEVICE_ADDRESS,
+    I2C_Peripheral_WriteRegister(LIS3DH_DEVICE_ADDRESS, //set the register with the value read
+                                             CTRL_REG1,
+                                             frequency);
+    
+    
+    I2C_Peripheral_WriteRegister(LIS3DH_DEVICE_ADDRESS, //set the high resolution mode
                                              CTRL_REG4,
                                              CTRL_REG4_HR);
     
         
-    I2C_Peripheral_WriteRegister(LIS3DH_DEVICE_ADDRESS,
-                                             CTRL_REG1,
-                                             frequency);
-    
-
     ISR_BUTTON_StartEx(BUTTON_ISR);
     Clock_DEB_Start();
     
-    ACC_TOT[0] = 0xA0;
-    ACC_TOT[7] = 0xC0;
+    ACC_TOT[0] = 0xA0; //Start byte
+    ACC_TOT[BUFFER_SIZE - 1] = 0xC0; //Stop byte
     
-    /////////////////////////////////////////
+    //ACQUISITION and DATA MANAGEMENT
     
     for(;;)
     {
         
-        if(flag_button == 0)
+        if(flag_button == 0) //if the button has not been pressed
         {
         
-            I2C_Peripheral_ReadRegister(LIS3DH_DEVICE_ADDRESS,
+            I2C_Peripheral_ReadRegister(LIS3DH_DEVICE_ADDRESS, //read the value of the Status Register
                                                 STATUS_REG,
-                                                &check);
-            if(check & 0b00001000)
+                                                &status_register);
+            
+            if(status_register & STATUS_REG_ZYXDA) //if a new set of data is available
             {
-                
+                //Read the LSB and MSB acceleration for each axis
                 error = I2C_Peripheral_ReadRegister(LIS3DH_DEVICE_ADDRESS,
                                                 OUT_X_L,
                                                 &ACC_X[0]);
@@ -173,82 +124,62 @@ int main(void)
                 }
                 if(error == NO_ERROR)
                 {
+                    //HR mode: 12 bit data --> ricomposition and 16 bit casting
+                    
                     Acc_X = (int16)((ACC_X[0]) | (ACC_X[1]<<8))>>4;
                     Acc_Y = (int16)((ACC_Y[0]) | (ACC_Y[1]<<8))>>4;
                     Acc_Z = (int16)((ACC_Z[0]) | (ACC_Z[1]<<8))>>4;
                     
-                    //ACC X
+                    //X AXIS
                     
-                    if((Acc_X >= 0) && (Acc_X <= 2047))
-                    {
-                        Acc_X_conv = (M_digit_TO_ms2 * Acc_X) * 1000;
-                    }
-                    else
-                    {
-                        Acc_X_conv =(M_digit_TO_ms2 * Acc_X - Q_digit_TO_ms2) * 1000;
-                    }
+                    Acc_X_conv = (M_digit_TO_ms2 * Acc_X) * 1000; //conversion: digits --> m/s2
                     
-                    Acc_X_new = (int16)(Acc_X_conv);
+                    Acc_X_new = (int16)(Acc_X_conv); //float --> int
                     
-                    ACC_TOT[1] = (uint8_t)(Acc_X_new & 0xFF);
-                    ACC_TOT[2] = (uint8_t)(Acc_X_new >> 8);
+                    ACC_TOT[1] = (uint8)(Acc_X_new & 0xFF); //bytes to send
+                    ACC_TOT[2] = (uint8)(Acc_X_new >> 8);
                     
-                    //ACC Y
+                    //Y AXIS
                     
-                    if((Acc_Y >= 0) && (Acc_Y <= 2047))
-                    {
-                        Acc_Y_conv = (M_digit_TO_ms2 * Acc_Y) * 1000;
-                    }
-                    else
-                    {
-                        Acc_Y_conv =(M_digit_TO_ms2 * Acc_Y - Q_digit_TO_ms2) * 1000;
-                    }
+                    Acc_Y_conv = (M_digit_TO_ms2 * Acc_Y) * 1000;
                     
                     Acc_Y_new = (int16)(Acc_Y_conv);
                     
-                    ACC_TOT[3] = (uint8_t)(Acc_Y_new & 0xFF);
-                    ACC_TOT[4] =(uint8_t)(Acc_Y_new >> 8);
+                    ACC_TOT[3] = (uint8)(Acc_Y_new & 0xFF);
+                    ACC_TOT[4] =(uint8)(Acc_Y_new >> 8);
                     
-                    //ACC Z
+                    //Z AXIS
                     
-                    if((Acc_Z >= 0) && (Acc_Z <= 2047))
-                    {
-                        Acc_Z_conv = (M_digit_TO_ms2 * Acc_Z) * 1000;
-                    }
-                    else
-                    {
-                        Acc_Z_conv =(M_digit_TO_ms2 * Acc_Z - Q_digit_TO_ms2) * 1000;
-                    }
+                    Acc_Z_conv = (M_digit_TO_ms2 * Acc_Z) * 1000;
                     
                     Acc_Z_new = (int16)(Acc_Z_conv);
                    
-                    ACC_TOT[5] = (uint8_t)(Acc_Z_new & 0xFF);
-                    ACC_TOT[6] = (uint8_t)(Acc_Z_new >> 8);
+                    ACC_TOT[5] = (uint8)(Acc_Z_new & 0xFF);
+                    ACC_TOT[6] = (uint8)(Acc_Z_new >> 8);
                     
-                    UART_PutArray(ACC_TOT,8);
+                    UART_PutArray(ACC_TOT,BUFFER_SIZE); //send buffer
                 }
             }
-            
         }
         
-        if(flag_button == 1)
+        if(flag_button == 1) //If the button has been pressed
         {
             flag_button = 0;
             
-            if(count < 6)
+            if(count < 6)//if the selected frequency is one of the allowed
             {
-                frequency = EEPROM_ReadByte(0x0000) + 0x10;
+                frequency = EEPROM_ReadByte(EEPROM) + 0x10; //select the following frequency
                 EEPROM_UpdateTemperature();
-                EEPROM_WriteByte(frequency, 0x0000);
+                EEPROM_WriteByte(frequency, EEPROM); //update the value in EEPROM
                 I2C_Peripheral_WriteRegister(LIS3DH_DEVICE_ADDRESS,
                                              CTRL_REG1,
-                                             frequency);
+                                             frequency); //set the register
             }
-            else
+            else //restart the cycle starting from f = 1Hz
             {
                 count = 0;
                 EEPROM_UpdateTemperature();
-                EEPROM_WriteByte(CTRL_REG1_FREQ1, 0x0000);
+                EEPROM_WriteByte(CTRL_REG1_FREQ1, EEPROM);
                 I2C_Peripheral_WriteRegister(LIS3DH_DEVICE_ADDRESS,
                                              CTRL_REG1,
                                              CTRL_REG1_FREQ1);

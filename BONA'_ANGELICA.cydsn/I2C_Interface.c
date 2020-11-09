@@ -26,6 +26,7 @@
     {
         // Stop I2C peripheral
         I2C_MASTER_Stop();
+        
         // Return no error since stop function does not return any error
         return NO_ERROR;
     }
@@ -79,4 +80,5 @@
         // Return error code
         return error ? ERROR : NO_ERROR;
     }
+    
 /* [] END OF FILE */
