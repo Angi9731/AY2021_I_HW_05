@@ -21,7 +21,7 @@
     
     ErrorCode I2C_Peripheral_Stop(void); //Stop I2C peripheral
     
-    ErrorCode I2C_Peripheral_ReadRegister(uint8_t device_address, //Read a register and save it in a variable
+    ErrorCode I2C_Peripheral_ReadRegister(uint8_t device_address, //Read the content of a register and save it in a variable
                                             uint8_t register_address,
                                             uint8_t* data);
     

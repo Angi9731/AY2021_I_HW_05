@@ -166,7 +166,7 @@ int main(void)
         {
             flag_button = 0;
             
-            if(count < 6)//if the selected frequency is one of the allowed
+            if(count < 6)//if frequency = [1,10,25,50,100,200]
             {
                 frequency = EEPROM_ReadByte(EEPROM) + 0x10; //select the following frequency
                 EEPROM_UpdateTemperature();
